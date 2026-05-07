@@ -331,6 +331,7 @@ Example prompt: "Compare all strategies on BTC-USD for 2 years"
 | **Binance** | Crypto screener, all pairs |
 | **KuCoin / Bybit+** | Crypto screener |
 | **NASDAQ / NYSE** | US stocks (AAPL, TSLA, NVDA...) |
+| **OMXSTO (Sweden)** | Nasdaq Stockholm stocks (APOTEA...) |
 | **EGX (Egypt)** | `egx_market_overview`, `egx_stock_screener`, `egx_trade_plan`, `egx_fibonacci_retracement` |
 | **Turkish (BIST)** | Via TradingView screener |
 

@@ -74,7 +74,7 @@ mcp = FastMCP(
     instructions=(
         "Multi-market screener backed by TradingView. "
         "Supports crypto exchanges (KuCoin, Binance, Bybit, MEXC, etc.) and stock markets "
-        "(EGX, BIST, NASDAQ, NYSE, Bursa Malaysia, HKEX, SSE, SZSE, TWSE, TPEX). "
+        "(EGX, BIST, NASDAQ, NYSE, OMXSTO, Bursa Malaysia, HKEX, SSE, SZSE, TWSE, TPEX). "
         "Tools: top_gainers, top_losers, bollinger_scan, coin_analysis, multi_agent_analysis, "
         "volume_breakout_scanner, egx_market_overview, egx_sector_scan, and more."
     ),
@@ -88,7 +88,7 @@ def top_gainers(exchange: str = "KUCOIN", timeframe: str = "15m", limit: int = 2
     """Return top gainers for an exchange and timeframe using Bollinger Band analysis.
 
     Args:
-        exchange: Exchange name — crypto: KUCOIN, BINANCE, BYBIT, MEXC; stocks: EGX, BIST, NASDAQ, NYSE, BURSA, HKEX, SSE, SZSE, TWSE, TPEX
+        exchange: Exchange name — crypto: KUCOIN, BINANCE, BYBIT, MEXC; stocks: EGX, BIST, NASDAQ, NYSE, OMXSTO, BURSA, HKEX, SSE, SZSE, TWSE, TPEX
         timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M
         limit: Number of rows to return (max 50)
     """
@@ -115,7 +115,7 @@ def bollinger_scan(exchange: str = "KUCOIN", timeframe: str = "4h", bbw_threshol
     """Scan for assets with low Bollinger Band Width (squeeze detection). Works with crypto and stocks.
 
     Args:
-        exchange: Exchange — crypto: KUCOIN, BINANCE, BYBIT, MEXC; stocks: EGX, BIST, NASDAQ, NYSE, BURSA, HKEX, SSE, SZSE, TWSE, TPEX
+        exchange: Exchange — crypto: KUCOIN, BINANCE, BYBIT, MEXC; stocks: EGX, BIST, NASDAQ, NYSE, OMXSTO, BURSA, HKEX, SSE, SZSE, TWSE, TPEX
         timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M
         bbw_threshold: Maximum BBW value to filter (default 0.04)
         limit: Number of rows to return (max 100)
@@ -152,8 +152,8 @@ def coin_analysis(symbol: str, exchange: str = "KUCOIN", timeframe: str = "15m")
     """Get detailed analysis for a specific asset (coin or stock) on specified exchange and timeframe.
 
     Args:
-        symbol: Symbol — crypto: "BTCUSDT", "ETHUSDT"; stocks: "COMI" (EGX), "THYAO" (BIST), "600519" (SSE), "300251" (SZSE), "2330" (TWSE), "3105" (TPEX)
-        exchange: Exchange — crypto: KUCOIN, BINANCE, MEXC; stocks: EGX, BIST, NASDAQ, NYSE, BURSA, HKEX, SSE, SZSE, TWSE, TPEX
+        symbol: Symbol — crypto: "BTCUSDT", "ETHUSDT"; stocks: "COMI" (EGX), "THYAO" (BIST), "APOTEA" (OMXSTO), "600519" (SSE), "300251" (SZSE), "2330" (TWSE), "3105" (TPEX)
+        exchange: Exchange — crypto: KUCOIN, BINANCE, MEXC; stocks: EGX, BIST, NASDAQ, NYSE, OMXSTO, BURSA, HKEX, SSE, SZSE, TWSE, TPEX
         timeframe: Time interval (5m, 15m, 1h, 4h, 1D, 1W, 1M)
 
     Returns:
@@ -702,6 +702,12 @@ def main() -> None:
     )
     parser.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8000")))
+    parser.add_argument(
+        "--allow-origin",
+        dest="allow_origin",
+        default=os.environ.get("ALLOW_ORIGIN"),
+        help="CORS Allow-Origin value, e.g. '*' or 'https://example.com'",
+    )
     args = parser.parse_args()
 
     if os.environ.get("DEBUG_MCP"):
@@ -716,7 +722,40 @@ def main() -> None:
             mcp.settings.port = args.port
         except Exception:
             pass
-        mcp.run(transport="streamable-http")
+
+        if args.allow_origin:
+            import anyio
+            import uvicorn
+            from mcp.server.transport_security import TransportSecuritySettings
+            from starlette.middleware.cors import CORSMiddleware
+
+            # Disable the built-in DNS-rebinding origin check so the Starlette
+            # CORSMiddleware below can handle access control instead.
+            mcp.settings.transport_security = TransportSecuritySettings(
+                enable_dns_rebinding_protection=False
+            )
+
+            origins = ["*"] if args.allow_origin == "*" else [args.allow_origin]
+            starlette_app = mcp.streamable_http_app()
+            app = CORSMiddleware(
+                starlette_app,
+                allow_origins=origins,
+                allow_methods=["*"],
+                allow_headers=["*"],
+            )
+
+            async def _run() -> None:
+                config = uvicorn.Config(
+                    app,
+                    host=args.host,
+                    port=args.port,
+                    log_level=mcp.settings.log_level.lower(),
+                )
+                await uvicorn.Server(config).serve()
+
+            anyio.run(_run)
+        else:
+            mcp.run(transport="streamable-http")
 
 
 if __name__ == "__main__":

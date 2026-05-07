@@ -17,6 +17,7 @@ _TIMEFRAME_ALIASES = {
 STOCK_EXCHANGES: Set[str] = {
     "egx", "bist", "nasdaq", "nyse",
     "amex", "nysearca", "pcx",          # NYSE Arca / AMEX (ETFs: GDX, GLD, XLE, SPY, QQQ, etc.)
+    "omxsto",
     "bursa", "myx", "klse", "ace", "leap",
     "hkex", "hk", "hsi",
     "asx",
@@ -40,6 +41,7 @@ EXCHANGE_SCREENER = {
     # Egyptian Stock Market Support
     "egx": "egypt",
     "nasdaq": "america",
+    "omxsto": "sweden",
     # Malaysia Stock Market Support
     "bursa": "malaysia",
     "myx": "malaysia",
@@ -73,6 +75,7 @@ _EXCHANGE_TV_PREFIX: dict = {
     "nysearca": "AMEX",
     "pcx": "AMEX",
     "nasdaq": "NASDAQ",
+    "omxsto": "OMXSTO",
     "nyse": "NYSE",
     "egx": "EGX",
     "bist": "BIST",

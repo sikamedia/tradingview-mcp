@@ -33,10 +33,11 @@ USER mcpuser
 # Expose the HTTP port
 EXPOSE 8000
 
-# Health check
+# Health check — TCP probe on the MCP port (FastMCP streamable-http does not
+# expose a /health endpoint, so we just confirm the server is listening).
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+    CMD python -c "import socket; socket.create_connection(('127.0.0.1', 8000), timeout=2).close()" || exit 1
 
 # Run the MCP server over streamable-http (ideal for Docker/remote deployments)
 ENTRYPOINT ["tradingview-mcp"]
-CMD ["streamable-http", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["streamable-http", "--host", "0.0.0.0", "--port", "8000", "--allow-origin", "*"]
