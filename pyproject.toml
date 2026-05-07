@@ -28,7 +28,7 @@ tradingview-mcp = "tradingview_mcp.server:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-tradingview_mcp = ["coinlist/*.txt"]
+tradingview_mcp = ["assetlist/*.txt"]
 
 [tool.uv]
 dev-dependencies = [
@@ -39,34 +39,26 @@ dev-dependencies = [
 package = true
 
 [tool.black]
-# Black 代码格式化工具配置
-line-length = 88                    # 行长度限制（Black 默认）
-target-version = ["py310"]          # 目标 Python 版本
-include = '\.pyi?$'                 # 包含的文件模式
+line-length = 88
+target-version = ["py310"]
+include = '\.pyi?$'
 extend-exclude = '''
-# 排除的文件和目录
 /(
-  # 虚拟环境
-  \.venv
+    \.venv
   | venv
   | \.env
-  # 构建目录
   | build
   | dist
   | \.eggs
   | \.egg-info
-  # 缓存目录
   | __pycache__
   | \.pytest_cache
   | \.mypy_cache
-  # 其他
   | \.git
   | \.tox
 )/
 '''
-# 保持字符串引号风格一致
 skip-string-normalization = false
-# 预览模式功能（可选，启用最新格式化特性）
 preview = false
 
 [build-system]

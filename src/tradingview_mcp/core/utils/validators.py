@@ -1,6 +1,6 @@
 from __future__ import annotations
 import os
-from typing import Set
+from typing import Literal, Set
 
 ALLOWED_TIMEFRAMES: Set[str] = {"5m", "15m", "1h", "4h", "1D", "1W", "1M"}
 _TIMEFRAME_ALIASES = {
@@ -104,14 +104,11 @@ def get_tv_exchange_prefix(exchange: str) -> str:
     """
     return _EXCHANGE_TV_PREFIX.get(exchange.strip().lower(), exchange.upper())
 
-# Get absolute path to coinlist directory relative to this module
-# This file is at: src/tradingview_mcp/core/utils/validators.py
-# We want: src/tradingview_mcp/coinlist/
 _this_file = __file__
 _utils_dir = os.path.dirname(_this_file)  # core/utils
-_core_dir = os.path.dirname(_utils_dir)   # core  
+_core_dir = os.path.dirname(_utils_dir)   # core
 _package_dir = os.path.dirname(_core_dir) # tradingview_mcp
-COINLIST_DIR = os.path.join(_package_dir, 'coinlist')
+ASSETLIST_DIR = os.path.join(_package_dir, 'assetlist')
 
 
 def sanitize_timeframe(tf: str, default: str = "5m") -> str:
@@ -133,6 +130,31 @@ def is_stock_exchange(exchange: str) -> bool:
     return exchange.strip().lower() in STOCK_EXCHANGES
 
 
+def get_asset_type(exchange: str) -> Literal["stock", "crypto"]:
+    """Return the broad asset class for an exchange."""
+    return "stock" if is_stock_exchange(exchange) else "crypto"
+
+
 def get_market_type(exchange: str) -> str:
     """Return the TradingView market type for screener queries."""
     return EXCHANGE_SCREENER.get(exchange.strip().lower(), "crypto")
+
+
+def build_tv_symbol(
+    symbol: str,
+    exchange: str,
+    *,
+    append_usdt_for_crypto: bool = False,
+) -> str:
+    """Build a TradingView ticker while preserving already-qualified symbols."""
+    normalized_symbol = symbol.strip().upper()
+    normalized_exchange = exchange.strip().lower()
+
+    if ":" in normalized_symbol:
+        return normalized_symbol
+
+    if append_usdt_for_crypto and get_asset_type(normalized_exchange) == "crypto":
+        if not normalized_symbol.endswith("USDT"):
+            normalized_symbol = f"{normalized_symbol}USDT"
+
+    return f"{get_tv_exchange_prefix(normalized_exchange)}:{normalized_symbol}"

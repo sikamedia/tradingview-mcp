@@ -12,9 +12,14 @@ from tradingview_mcp.core.types import (
     IndicatorMap, MultiRow, Row,
     percent_change, tf_to_tv_resolution,
 )
-from tradingview_mcp.core.services.coinlist import load_symbols
+from tradingview_mcp.core.services.assetlist import load_symbols
 from tradingview_mcp.core.services.indicators import compute_metrics
-from tradingview_mcp.core.utils.validators import EXCHANGE_SCREENER, get_market_type, get_tv_exchange_prefix
+from tradingview_mcp.core.utils.validators import (
+    EXCHANGE_SCREENER,
+    build_tv_symbol,
+    get_asset_type,
+    get_market_type,
+)
 
 try:
     from tradingview_ta import get_multiple_analysis
@@ -110,7 +115,7 @@ def fetch_trending_analysis(
     limit: int = 50,
 ) -> List[Row]:
     """
-    Fetch trending coins across all available symbols in batches of 200.
+    Fetch trending assets across all available symbols in batches of 200.
 
     Args:
         exchange:      Exchange identifier.
@@ -131,7 +136,7 @@ def fetch_trending_analysis(
 
     screener = EXCHANGE_SCREENER.get(exchange, "crypto")
     batch_size = 200
-    all_coins: List[Row] = []
+    all_assets: List[Row] = []
 
     for i in range(0, len(symbols), batch_size):
         batch = symbols[i : i + batch_size]
@@ -152,7 +157,7 @@ def fetch_trending_analysis(
                     if metrics["rating"] != rating_filter:
                         continue
 
-                all_coins.append(
+                all_assets.append(
                     Row(
                         symbol=key,
                         changePercent=metrics["change"],
@@ -171,8 +176,8 @@ def fetch_trending_analysis(
             except (TypeError, ZeroDivisionError, KeyError):
                 continue
 
-    all_coins.sort(key=lambda x: x["changePercent"], reverse=True)
-    return all_coins[:limit]
+    all_assets.sort(key=lambda x: x["changePercent"], reverse=True)
+    return all_assets[:limit]
 
 
 # ── Multi-timeframe screener ───────────────────────────────────────────────────
@@ -416,15 +421,15 @@ def fetch_multi_timeframe_patterns(
         return []
 
 
-# ── Coin analysis (single asset) ───────────────────────────────────────────────
+# ── Asset analysis (single symbol) ─────────────────────────────────────────────
 
-def analyze_coin(
+def analyze_asset(
     symbol: str,
     exchange: str,
     timeframe: str,
 ) -> dict:
     """
-    Full technical analysis for a single coin/stock.
+    Full technical analysis for a single asset.
 
     Args:
         symbol:    Validated symbol string (with exchange prefix).
@@ -442,26 +447,37 @@ def analyze_coin(
         compute_trade_setup,
         compute_trade_quality,
     )
-    from tradingview_mcp.core.utils.validators import is_stock_exchange
-
     if not _TA_AVAILABLE:
         return {"error": "tradingview_ta is missing; run `uv sync`."}
 
-    full_symbol = symbol.upper() if ":" in symbol else f"{get_tv_exchange_prefix(exchange)}:{symbol.upper()}"
+    asset_type = get_asset_type(exchange)
+    full_symbol = build_tv_symbol(symbol, exchange)
     screener = EXCHANGE_SCREENER.get(exchange, "crypto")
 
     try:
         analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=[full_symbol])
 
         if full_symbol not in analysis or analysis[full_symbol] is None:
-            return {"error": f"No data found for {symbol} on {exchange}", "symbol": symbol, "exchange": exchange, "timeframe": timeframe}
+            return {
+                "error": f"No data found for {symbol} on {exchange}",
+                "symbol": symbol,
+                "exchange": exchange,
+                "asset_type": asset_type,
+                "timeframe": timeframe,
+            }
 
         data = analysis[full_symbol]
         indicators = data.indicators
         metrics = compute_metrics(indicators)
 
         if not metrics:
-            return {"error": f"Could not compute metrics for {symbol}", "symbol": symbol, "exchange": exchange, "timeframe": timeframe}
+            return {
+                "error": f"Could not compute metrics for {symbol}",
+                "symbol": symbol,
+                "exchange": exchange,
+                "asset_type": asset_type,
+                "timeframe": timeframe,
+            }
 
         volume = indicators.get("volume", 0)
         high = indicators.get("high", 0)
@@ -473,7 +489,7 @@ def analyze_coin(
         tf_context = analyze_timeframe_context(indicators, timeframe)
 
         trade_data: dict = {}
-        if is_stock_exchange(exchange):
+        if asset_type == "stock":
             score_result = compute_stock_score(indicators)
             if score_result:
                 trade_data["stock_score"] = score_result["score"]
@@ -500,6 +516,7 @@ def analyze_coin(
         return {
             "symbol": full_symbol,
             "exchange": exchange,
+            "asset_type": asset_type,
             "timeframe": timeframe,
             "timestamp": "real-time",
             "price_data": {
@@ -538,7 +555,13 @@ def analyze_coin(
             **trade_data,
         }
     except Exception as exc:
-        return {"error": f"Analysis failed: {exc}", "symbol": symbol, "exchange": exchange, "timeframe": timeframe}
+        return {
+            "error": f"Analysis failed: {exc}",
+            "symbol": symbol,
+            "exchange": exchange,
+            "asset_type": asset_type,
+            "timeframe": timeframe,
+        }
 
 
 # ── Consecutive candle pattern scan ────────────────────────────────────────────
@@ -552,7 +575,7 @@ def scan_consecutive_candles(
     limit: int,
 ) -> dict:
     """
-    Scan for coins with consecutive growing/shrinking candle patterns.
+    Scan for assets with consecutive growing/shrinking candle patterns.
 
     Args:
         exchange:     Validated exchange identifier.
@@ -580,7 +603,7 @@ def scan_consecutive_candles(
     except Exception as exc:
         return {"error": f"Pattern analysis failed: {exc}", "exchange": exchange, "timeframe": timeframe}
 
-    pattern_coins: list[dict] = []
+    pattern_assets: list[dict] = []
 
     for symbol, data in analysis.items():
         if data is None:
@@ -632,7 +655,7 @@ def scan_consecutive_candles(
                 continue
 
             metrics = compute_metrics(indicators)
-            pattern_coins.append({
+            pattern_assets.append({
                 "symbol": symbol,
                 "price": round(close_price, 6),
                 "current_change": round(current_change, 3),
@@ -657,9 +680,9 @@ def scan_consecutive_candles(
             continue
 
     if pattern_type == "bullish":
-        pattern_coins.sort(key=lambda x: (x["pattern_strength"], x["current_change"]), reverse=True)
+        pattern_assets.sort(key=lambda x: (x["pattern_strength"], x["current_change"]), reverse=True)
     else:
-        pattern_coins.sort(key=lambda x: (x["pattern_strength"], -x["current_change"]), reverse=True)
+        pattern_assets.sort(key=lambda x: (x["pattern_strength"], -x["current_change"]), reverse=True)
 
     return {
         "exchange": exchange,
@@ -667,8 +690,8 @@ def scan_consecutive_candles(
         "pattern_type": pattern_type,
         "candle_count": candle_count,
         "min_growth": min_growth,
-        "total_found": len(pattern_coins),
-        "data": pattern_coins[:limit],
+        "total_found": len(pattern_assets),
+        "data": pattern_assets[:limit],
     }
 
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from tradingview_mcp.core.services.coinlist import load_symbols
+from tradingview_mcp.core.services.assetlist import load_symbols
 from tradingview_mcp.core.services.indicators import (
     compute_metrics,
     extract_extended_indicators,
@@ -55,7 +55,7 @@ def get_egx_market_overview(timeframe: str = "1D", limit: int = 10) -> dict:
 
     symbols = load_symbols("egx")
     if not symbols:
-        return {"error": "No EGX symbols found. Check coinlist/egx.txt"}
+        return {"error": "No EGX symbols found. Check asset list for egx.txt"}
 
     screener = EXCHANGE_SCREENER.get("egx", "egypt")
     all_stocks: List[dict] = []

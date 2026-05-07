@@ -23,7 +23,7 @@ WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin/tradingview-mcp /usr/local/bin/tradingview-mcp
 
-# Copy app source (needed for coinlist data files etc.)
+# Copy app source (needed for assetlist data files etc.)
 COPY --from=builder /app /app
 
 # Create non-root user for security

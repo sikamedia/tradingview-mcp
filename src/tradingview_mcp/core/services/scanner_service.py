@@ -8,9 +8,13 @@ from __future__ import annotations
 
 from typing import List
 
-from tradingview_mcp.core.services.coinlist import load_symbols
+from tradingview_mcp.core.services.assetlist import load_symbols
 from tradingview_mcp.core.services.indicators import compute_metrics
-from tradingview_mcp.core.utils.validators import EXCHANGE_SCREENER, is_stock_exchange
+from tradingview_mcp.core.utils.validators import (
+    EXCHANGE_SCREENER,
+    build_tv_symbol,
+    get_asset_type,
+)
 
 try:
     from tradingview_ta import get_multiple_analysis
@@ -29,7 +33,7 @@ def volume_breakout_scan(
     limit: int = 25,
 ) -> List[dict]:
     """
-    Detect coins with simultaneous volume and price breakouts.
+    Detect assets with simultaneous volume and price breakouts.
 
     Args:
         exchange:          Exchange identifier.
@@ -129,17 +133,8 @@ def volume_confirmation_analyze(
     Returns:
         Dict with price data, volume analysis, technical indicators, and signals.
     """
-    # Normalise symbol
-    if not is_stock_exchange(exchange) and not symbol.upper().endswith("USDT"):
-        symbol = symbol.upper() + "USDT"
-    else:
-        symbol = symbol.upper()
-
-    if is_stock_exchange(exchange) and ":" not in symbol:
-        full_symbol = f"{exchange.upper()}:{symbol}"
-    else:
-        full_symbol = symbol
-
+    asset_type = get_asset_type(exchange)
+    full_symbol = build_tv_symbol(symbol, exchange, append_usdt_for_crypto=True)
     screener = EXCHANGE_SCREENER.get(exchange, "crypto")
 
     try:
@@ -196,7 +191,8 @@ def volume_confirmation_analyze(
             volume_strength = "WEAK"
 
         return {
-            "symbol": symbol,
+            "symbol": full_symbol,
+            "asset_type": asset_type,
             "price_data": {
                 "close": close,
                 "change_percent": round(price_change, 2),
@@ -257,8 +253,8 @@ def smart_volume_scan(
         return []
 
     filtered: List[dict] = []
-    for coin in breakouts:
-        rsi = coin["indicators"].get("RSI", 50)
+    for asset in breakouts:
+        rsi = asset["indicators"].get("RSI", 50)
 
         if rsi_range == "oversold" and rsi >= 30:
             continue
@@ -268,12 +264,12 @@ def smart_volume_scan(
             continue
 
         recommendation = ""
-        if coin["changePercent"] > 0 and coin["volume_ratio"] >= 2.0:
+        if asset["changePercent"] > 0 and asset["volume_ratio"] >= 2.0:
             recommendation = "🚀 STRONG BUY" if rsi < 70 else "⚠️ OVERBOUGHT - CAUTION"
-        elif coin["changePercent"] < 0 and coin["volume_ratio"] >= 2.0:
+        elif asset["changePercent"] < 0 and asset["volume_ratio"] >= 2.0:
             recommendation = "📉 STRONG SELL" if rsi > 30 else "🛒 OVERSOLD - OPPORTUNITY?"
 
-        coin["trading_recommendation"] = recommendation
-        filtered.append(coin)
+        asset["trading_recommendation"] = recommendation
+        filtered.append(asset)
 
     return filtered[:limit]

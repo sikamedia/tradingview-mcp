@@ -3,7 +3,6 @@ version: '3.8'
 services:
   tradingview-mcp:
     build: .
-    image: atilaahmet/tradingview-mcp:latest
     container_name: tradingview-mcp
     ports:
       - "9001:8000"

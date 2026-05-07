@@ -16,11 +16,11 @@ import os
 from mcp.server.fastmcp import FastMCP
 
 # ── Service imports ────────────────────────────────────────────────────────────
-from tradingview_mcp.core.services.coinlist import load_symbols
+from tradingview_mcp.core.services.assetlist import load_symbols
 from tradingview_mcp.core.services.screener_service import (
     fetch_bollinger_analysis,
     fetch_trending_analysis,
-    analyze_coin,
+    analyze_asset,
     scan_consecutive_candles,
     scan_advanced_candle_patterns_single_tf,
     fetch_multi_timeframe_patterns,
@@ -57,7 +57,8 @@ from tradingview_mcp.core.services.backtest_service import (
 from tradingview_mcp.core.utils.validators import (
     sanitize_timeframe,
     sanitize_exchange,
-    get_tv_exchange_prefix,
+    build_tv_symbol,
+    get_asset_type,
 )
 
 try:
@@ -75,7 +76,7 @@ mcp = FastMCP(
         "Multi-market screener backed by TradingView. "
         "Supports crypto exchanges (KuCoin, Binance, Bybit, MEXC, etc.) and stock markets "
         "(EGX, BIST, NASDAQ, NYSE, OMXSTO, Bursa Malaysia, HKEX, SSE, SZSE, TWSE, TPEX). "
-        "Tools: top_gainers, top_losers, bollinger_scan, coin_analysis, multi_agent_analysis, "
+        "Tools: top_gainers, top_losers, bollinger_scan, asset_analysis, multi_agent_analysis, "
         "volume_breakout_scanner, egx_market_overview, egx_sector_scan, and more."
     ),
 )
@@ -129,7 +130,7 @@ def bollinger_scan(exchange: str = "KUCOIN", timeframe: str = "4h", bbw_threshol
 
 @mcp.tool()
 def rating_filter(exchange: str = "KUCOIN", timeframe: str = "5m", rating: int = 2, limit: int = 25) -> list[dict]:
-    """Filter coins by Bollinger Band rating.
+    """Filter assets by Bollinger Band rating.
 
     Args:
         exchange: Exchange name like KUCOIN, BINANCE, BYBIT, MEXC, etc.
@@ -145,10 +146,10 @@ def rating_filter(exchange: str = "KUCOIN", timeframe: str = "5m", rating: int =
     return [{"symbol": r["symbol"], "changePercent": r["changePercent"], "indicators": dict(r["indicators"])} for r in rows]
 
 
-# ── Coin / asset analysis ──────────────────────────────────────────────────────
+# ── Asset analysis ─────────────────────────────────────────────────────────────
 
 @mcp.tool()
-def coin_analysis(symbol: str, exchange: str = "KUCOIN", timeframe: str = "15m") -> dict:
+def asset_analysis(symbol: str, exchange: str = "KUCOIN", timeframe: str = "15m") -> dict:
     """Get detailed analysis for a specific asset (coin or stock) on specified exchange and timeframe.
 
     Args:
@@ -161,7 +162,7 @@ def coin_analysis(symbol: str, exchange: str = "KUCOIN", timeframe: str = "15m")
     """
     exchange = sanitize_exchange(exchange, "KUCOIN")
     timeframe = sanitize_timeframe(timeframe, "15m")
-    return analyze_coin(symbol, exchange, timeframe)
+    return analyze_asset(symbol, exchange, timeframe)
 
 
 # ── Candle pattern tools ───────────────────────────────────────────────────────
@@ -175,7 +176,7 @@ def consecutive_candles_scan(
     min_growth: float = 2.0,
     limit: int = 20,
 ) -> dict:
-    """Scan for coins with consecutive growing/shrinking candles pattern.
+    """Scan for assets with consecutive growing/shrinking candles pattern.
 
     Args:
         exchange: Exchange name (BINANCE, KUCOIN, etc.)
@@ -249,7 +250,7 @@ def volume_breakout_scanner(
     price_change_min: float = 3.0,
     limit: int = 25,
 ) -> list[dict]:
-    """Detect coins with volume breakout + price breakout.
+    """Detect assets with volume breakout + price breakout.
 
     Args:
         exchange: Exchange name like KUCOIN, BINANCE, BYBIT, MEXC, etc.
@@ -268,10 +269,10 @@ def volume_breakout_scanner(
 
 @mcp.tool()
 def volume_confirmation_analysis(symbol: str, exchange: str = "KUCOIN", timeframe: str = "15m") -> dict:
-    """Detailed volume confirmation analysis for a specific coin.
+    """Detailed volume confirmation analysis for a specific asset.
 
     Args:
-        symbol: Coin symbol (e.g., BTCUSDT)
+        symbol: Asset symbol (e.g., BTCUSDT, APOTEA)
         exchange: Exchange name
         timeframe: Time frame for analysis
     """
@@ -320,7 +321,7 @@ def multi_agent_analysis(symbol: str, exchange: str = "KUCOIN", timeframe: str =
     """
     exchange = sanitize_exchange(exchange, "KUCOIN")
     timeframe = sanitize_timeframe(timeframe, "15m")
-    full_symbol = symbol.upper() if ":" in symbol else f"{get_tv_exchange_prefix(exchange)}:{symbol.upper()}"
+    full_symbol = build_tv_symbol(symbol, exchange)
     return run_multi_agent_analysis(full_symbol, exchange, timeframe)
 
 
@@ -448,7 +449,7 @@ def multi_timeframe_analysis(symbol: str, exchange: str = "KUCOIN") -> dict:
         exchange: Exchange — crypto: KUCOIN, BINANCE, MEXC; stocks: EGX, BIST, NASDAQ, NYSE, AMEX, NYSEARCA, PCX, SSE, SZSE, TWSE, TPEX
     """
     exchange = sanitize_exchange(exchange, "KUCOIN")
-    full_symbol = symbol.upper() if ":" in symbol else f"{get_tv_exchange_prefix(exchange)}:{symbol.upper()}"
+    full_symbol = build_tv_symbol(symbol, exchange)
     return run_multi_timeframe_analysis(full_symbol, exchange)
 
 
@@ -484,11 +485,14 @@ def combined_analysis(symbol: str, exchange: str = "NASDAQ", timeframe: str = "1
 
     Args:
         symbol: Asset symbol ("AAPL", "BTCUSDT", "THYAO", "GDX")
-        exchange: Exchange (NASDAQ, NYSE, AMEX, NYSEARCA, PCX, BINANCE, KUCOIN, MEXC, BIST, EGX, TWSE, TPEX)
+        exchange: Exchange (NASDAQ, NYSE, OMXSTO, AMEX, NYSEARCA, PCX, BINANCE, KUCOIN, MEXC, BIST, EGX, TWSE, TPEX)
         timeframe: Analysis timeframe (5m, 15m, 1h, 4h, 1D, 1W)
     """
-    tech = coin_analysis(symbol, exchange, timeframe)
-    cat = "crypto" if exchange.upper() in ["BINANCE", "KUCOIN", "BYBIT", "MEXC"] else "stocks"
+    exchange = sanitize_exchange(exchange, "NASDAQ")
+    timeframe = sanitize_timeframe(timeframe, "1D")
+    asset_type = get_asset_type(exchange)
+    tech = asset_analysis(symbol, exchange, timeframe)
+    cat = "crypto" if asset_type == "crypto" else "stocks"
     sentiment = analyze_sentiment(symbol, category=cat)
     news = fetch_news_summary(symbol, category=cat, limit=5)
 
@@ -502,6 +506,7 @@ def combined_analysis(symbol: str, exchange: str = "NASDAQ", timeframe: str = "1
     return {
         "symbol": symbol,
         "exchange": exchange,
+        "asset_type": asset_type,
         "timeframe": timeframe,
         "technical": tech,
         "sentiment": sentiment,
@@ -672,21 +677,21 @@ def stock_extended_hours(symbol: str) -> dict:
 
 @mcp.resource("exchanges://list")
 def exchanges_list() -> str:
-    """List available exchanges from the coinlist directory."""
+    """List available exchanges from the packaged asset list directory."""
     try:
         current_dir = os.path.dirname(__file__)
-        coinlist_dir = os.path.join(current_dir, "coinlist")
-        if os.path.exists(coinlist_dir):
+        assetlist_dir = os.path.join(current_dir, "assetlist")
+        if os.path.exists(assetlist_dir):
             exchanges = [
                 f[:-4].upper()
-                for f in os.listdir(coinlist_dir)
+                for f in os.listdir(assetlist_dir)
                 if f.endswith(".txt")
             ]
             if exchanges:
                 return f"Available exchanges: {', '.join(sorted(exchanges))}"
     except Exception:
         pass
-    return "Common exchanges: KUCOIN, BINANCE, BYBIT, MEXC, BITGET, OKX, COINBASE, GATEIO, HUOBI, BITFINEX, KRAKEN, BITSTAMP, BIST, EGX, NASDAQ, TWSE, TPEX"
+    return "Common exchanges: KUCOIN, BINANCE, BYBIT, MEXC, BITGET, OKX, COINBASE, GATEIO, HUOBI, BITFINEX, KRAKEN, BITSTAMP, BIST, EGX, NASDAQ, OMXSTO, TWSE, TPEX"
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────
@@ -724,10 +729,21 @@ def main() -> None:
             pass
 
         if args.allow_origin:
+            import sys
+
             import anyio
             import uvicorn
             from mcp.server.transport_security import TransportSecuritySettings
             from starlette.middleware.cors import CORSMiddleware
+
+            if args.allow_origin == "*":
+                print(
+                    "[tradingview-mcp] WARNING: --allow-origin='*' — CORS open to "
+                    "all origins and DNS-rebinding protection disabled. Do not "
+                    "expose this server to untrusted networks.",
+                    file=sys.stderr,
+                    flush=True,
+                )
 
             # Disable the built-in DNS-rebinding origin check so the Starlette
             # CORSMiddleware below can handle access control instead.
@@ -735,11 +751,10 @@ def main() -> None:
                 enable_dns_rebinding_protection=False
             )
 
-            origins = ["*"] if args.allow_origin == "*" else [args.allow_origin]
             starlette_app = mcp.streamable_http_app()
             app = CORSMiddleware(
                 starlette_app,
-                allow_origins=origins,
+                allow_origins=[args.allow_origin],
                 allow_methods=["*"],
                 allow_headers=["*"],
             )

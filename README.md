@@ -313,6 +313,7 @@ Example prompt: "Compare all strategies on BTC-USD for 2 years"
 
 | Tool | Description |
 |------|-------------|
+| `asset_analysis` | Full TA for crypto or stock symbols, including asset_type classification |
 | `get_technical_analysis` | Full TA: RSI, MACD, Bollinger, 23 indicators with BUY/SELL/HOLD |
 | `get_multiple_analysis` | Bulk TA for multiple symbols at once |
 | `get_bollinger_band_analysis` | Proprietary ±3 BB rating system |
